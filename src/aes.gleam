@@ -9,13 +9,13 @@ fn crypto_one_time_raw(
   iv: BitArray,
   data: BitArray,
   encrypt: Bool,
-) -> Result(BitArray, atom)
+) -> BitArray
 
-// Create atoms using Erlang's list_to_atom function
+//-> Result(BitArray, atom)
+
 @external(erlang, "erlang", "list_to_atom")
 fn list_to_atom(charlist: List(Int)) -> atom
 
-// Helper to convert string to charlist
 @external(erlang, "erlang", "binary_to_list")
 fn binary_to_list(binary: BitArray) -> List(Int)
 
@@ -25,9 +25,29 @@ fn aes_256_cbc() -> atom {
   |> list_to_atom
 }
 
-pub fn dec(key_string: String, ciphertext_hex: String) {
+fn unpad(bits: BitArray, block_size: Int) {
+  let assert Ok(padding) =
+    bit_array.slice(bits, bit_array.byte_size(bits) - 1, 1)
+  let padding = bit_array_to_int(padding)
+  let assert Ok(result) =
+    bit_array.slice(bits, 0, bit_array.byte_size(bits) - padding)
+  result
+}
+
+fn bit_array_to_int(bits: BitArray) -> Int {
+  case bits {
+    <<value:int>> -> value
+    _ -> panic
+  }
+}
+
+pub fn decrypt_aes_256_cbc(
+  key_string: String,
+  ciphertext_hex: String,
+) -> Result(String, Nil) {
   let key = bit_array.from_string(key_string)
   let iv = key_string |> string.slice(0, 16) |> bit_array.from_string()
   let assert Ok(ciphertext) = bit_array.base16_decode(ciphertext_hex)
-  crypto_one_time_raw(aes_256_cbc(), key, iv, ciphertext, False)
+  let result = crypto_one_time_raw(aes_256_cbc(), key, iv, ciphertext, False)
+  result |> unpad(16) |> bit_array.to_string
 }
