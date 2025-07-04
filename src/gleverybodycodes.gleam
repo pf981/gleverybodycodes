@@ -1,4 +1,5 @@
 import envoy
+import gleam
 import gleam/bool
 import gleam/dynamic/decode
 import gleam/http/request
@@ -10,26 +11,26 @@ import gleam/option.{type Option, None}
 import gleam/result
 import gleam/string
 import simplifile
+import snag.{type Result}
 
-fn get_home() -> Result(String, String) {
+fn get_home() -> Result(String) {
   case envoy.get("HOME") {
     Ok(home) -> Ok(home)
     Error(Nil) ->
       envoy.get("USERPROFILE")
-      |> result.replace_error(
-        "Unable to expand ~. $HOME and $USERPROFILE not set.",
-      )
+      |> snag.map_error(fn(_) { "Unable to expand ~" })
+      |> snag.context("$HOME and $USERPROFILE not set")
   }
 }
 
-fn expand_home(path: String) -> Result(String, String) {
+fn expand_home(path: String) -> Result(String) {
   use <- bool.guard(!string.contains(path, "~"), Ok(path))
   use home <- result.try(get_home())
   path |> string.replace("~", home) |> Ok()
 }
 
 // EC_CONFIG_DIR, EC_DATA_DIR, EC_TOKEN
-fn get_token() -> Result(String, String) {
+fn get_token() -> Result(String) {
   use _ <- result.try_recover(envoy.get("EC_TOKEN"))
 
   use path <- result.try(
@@ -40,7 +41,7 @@ fn get_token() -> Result(String, String) {
 
   simplifile.read(path)
   |> result.map(string.trim_end)
-  |> result.map_error(fn(e) {
+  |> snag.map_error(fn(e) {
     "Unable to read config file: "
     <> path
     <> "\n"
@@ -65,7 +66,7 @@ type User {
   )
 }
 
-fn user_from_json(json_string: String) -> Result(User, json.DecodeError) {
+fn user_from_json(json_string: String) -> gleam.Result(User, json.DecodeError) {
   let user_decoder = {
     use level <- decode.field("level", decode.int)
     use seed <- decode.field("seed", decode.int)
@@ -142,7 +143,7 @@ fn http_error_to_string(error: httpc.HttpError) -> String {
   }
 }
 
-fn get_json(token: String, url: String) -> Result(String, String) {
+fn get_json(token: String, url: String) -> Result(String) {
   let assert Ok(base_req) = request.to(url)
 
   let req =
@@ -152,20 +153,20 @@ fn get_json(token: String, url: String) -> Result(String, String) {
     |> request.prepend_header("Cookie", "everybody-codes=" <> token)
 
   use resp <- result.try(
-    httpc.send(req) |> result.map_error(http_error_to_string),
+    httpc.send(req) |> snag.map_error(http_error_to_string),
   )
   case resp.status {
     200 -> Ok(resp.body)
     error_status ->
-      Error(
-        "Non-200 status, " <> int.to_string(error_status) <> " from " <> url,
+      snag.error(
+        "Non-200 status, " <> int.to_string(error_status) <> ", from " <> url,
       )
   }
 }
 
-fn get_me(token: String) -> Result(User, String) {
+fn get_me(token: String) -> Result(User) {
   use json <- result.try(get_json(token, "https://everybody.codes/api/user/me"))
-  user_from_json(json) |> result.map_error(json_error_to_string)
+  user_from_json(json) |> snag.map_error(json_error_to_string)
 }
 
 pub fn main() -> Nil {
@@ -177,6 +178,6 @@ pub fn main() -> Nil {
   }
   case res {
     Ok(_) -> Nil
-    Error(e) -> io.print_error(e)
+    Error(e) -> e |> snag.pretty_print() |> io.println_error()
   }
 }
