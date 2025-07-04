@@ -51,8 +51,7 @@ type User {
     name: Option(String),
     country: Option(String),
     url: Option(String),
-    badges: Option(String),
-    // badges left as JSON string for now
+    // badges: Option(Dict(String, String)), // Don't know what type badges is
   )
 }
 
@@ -85,11 +84,12 @@ fn user_from_json(json_string: String) -> Result(User, json.DecodeError) {
       None,
       decode.optional(decode.string),
     )
-    use badges <- decode.optional_field(
-      "badges",
-      None,
-      decode.optional(decode.string),
-    )
+    // Don't know what type badges is
+    // use badges <- decode.optional_field(
+    //   "badges",
+    //   None,
+    //   decode.optional(decode.dict),
+    // )
     decode.success(User(
       level:,
       seed:,
@@ -102,7 +102,6 @@ fn user_from_json(json_string: String) -> Result(User, json.DecodeError) {
       name:,
       country:,
       url:,
-      badges:,
     ))
   }
   json.parse(from: json_string, using: user_decoder)
@@ -111,7 +110,11 @@ fn user_from_json(json_string: String) -> Result(User, json.DecodeError) {
 fn get_me(token: String) {
   let assert Ok(base_req) = request.to("https://everybody.codes/api/user/me")
 
-  let req = request.prepend_header(base_req, "accept", "application/json")
+  let req =
+    base_req
+    |> request.prepend_header("accept", "application/json")
+    |> request.prepend_header("User-Agent", "github.com/pf981/gleverybodycodes")
+    |> request.prepend_header("Cookie", "everybody-codes=" <> token)
 
   // Send the HTTP request to the server
   use resp <- result.try(httpc.send(req))
@@ -138,6 +141,7 @@ pub fn main() -> Nil {
   let assert Ok(token) = get_token()
 
   let assert Ok(resp) = get_me(token)
+  // let assert Ok(resp) = get_me("")
 
   echo resp.body
 
