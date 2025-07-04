@@ -1,3 +1,4 @@
+import aes
 import envoy
 import gleam
 import gleam/bool
@@ -169,13 +170,8 @@ fn get_me(token: String) -> Result(User) {
   user_from_json(json) |> snag.map_error(json_error_to_string)
 }
 
-type Input {
-  Encrypted(String)
-  Decrypted(String)
-}
-
 type Inputs =
-  #(Input, Input, Input)
+  #(String, String, String)
 
 fn inputs_from_json(
   json_string: String,
@@ -184,7 +180,7 @@ fn inputs_from_json(
     use input1 <- decode.field("1", decode.string)
     use input2 <- decode.field("1", decode.string)
     use input3 <- decode.field("1", decode.string)
-    decode.success(#(Encrypted(input1), Encrypted(input1), Encrypted(input1)))
+    decode.success(#(input1, input2, input3))
   }
   json.parse(from: json_string, using: input_decoder)
 }
@@ -284,20 +280,60 @@ fn get_aes(token: String, event: Int, quest: Int) -> Result(Aes) {
   aes_from_json(json) |> snag.map_error(json_error_to_string)
 }
 
+fn get_input(event: Int, quest: Int, part: Int) -> Result(String) {
+  use token <- result.try(get_token())
+  use user <- result.try(get_me(token))
+  let seed = user.seed
+  use inputs <- result.try(get_inputs(token, seed, event, quest))
+  use aes_keys <- result.try(get_aes(token, event, quest))
+
+  use #(key, input) <- result.try(
+    case part, aes_keys {
+      1, aes_keys -> Ok(#(aes_keys.key1, inputs.0))
+      2, OneComplete(key2:, ..)
+      | 2, TwoComplete(key2:, ..)
+      | 2, ThreeComplete(key2:, ..)
+      -> Ok(#(key2, inputs.1))
+      3, TwoComplete(key3:, ..) | 3, ThreeComplete(key3:, ..) ->
+        Ok(#(key3, inputs.2))
+      2, _ | 3, _ ->
+        snag.error(
+          "Havn't completed prerequisite parts to get part "
+          <> int.to_string(part),
+        )
+      _, _ -> snag.error("Invalid part: " <> int.to_string(part))
+    }
+    |> snag.context(
+      "Getting input event="
+      <> int.to_string(event)
+      <> ", quest="
+      <> int.to_string(quest)
+      <> ", part="
+      <> int.to_string(part),
+    ),
+  )
+
+  aes.decrypt_aes_256_cbc(key, input)
+  |> snag.map_error(aes.aes_error_to_string)
+}
+
 pub fn main() -> Nil {
-  let res = {
-    use token <- result.try(get_token())
-    use user <- result.try(get_me(token))
-    let seed = user.seed
-    use inputs <- result.try(get_inputs(token, seed, 1, 1))
-    use aes <- result.try(get_aes(token, 1, 1))
-    echo user
-    echo inputs
-    echo aes
-    Ok(Nil)
-  }
-  case res {
-    Ok(_) -> Nil
+  // let res = {
+  //   use token <- result.try(get_token())
+  //   use user <- result.try(get_me(token))
+  //   let seed = user.seed
+  //   use inputs <- result.try(get_inputs(token, seed, 1, 1))
+  //   use aes <- result.try(get_aes(token, 1, 1))
+  //   echo user
+  //   echo inputs
+  //   echo aes
+  //   Ok(Nil)
+  // }
+
+  let input = get_input(1, 1, 1)
+  case input {
+    Ok(s) -> io.println(s)
     Error(e) -> e |> snag.pretty_print() |> io.println_error()
   }
+  Nil
 }
