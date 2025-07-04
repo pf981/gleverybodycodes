@@ -2,8 +2,8 @@ import envoy
 import gleam/bool
 import gleam/dynamic/decode
 import gleam/http/request
-import gleam/http/response
 import gleam/httpc
+import gleam/int
 import gleam/io
 import gleam/json
 import gleam/option.{type Option, None}
@@ -142,8 +142,8 @@ fn http_error_to_string(error: httpc.HttpError) -> String {
   }
 }
 
-fn get_me(token: String) -> Result(User, String) {
-  let assert Ok(base_req) = request.to("https://everybody.codes/api/user/me")
+fn get_json(token: String, url: String) -> Result(String, String) {
+  let assert Ok(base_req) = request.to(url)
 
   let req =
     base_req
@@ -151,30 +151,32 @@ fn get_me(token: String) -> Result(User, String) {
     |> request.prepend_header("User-Agent", "github.com/pf981/gleverybodycodes")
     |> request.prepend_header("Cookie", "everybody-codes=" <> token)
 
-  // Send the HTTP request to the server
   use resp <- result.try(
     httpc.send(req) |> result.map_error(http_error_to_string),
   )
+  case resp.status {
+    200 -> Ok(resp.body)
+    error_status ->
+      Error(
+        "Non-200 status, " <> int.to_string(error_status) <> " from " <> url,
+      )
+  }
+}
 
-  echo resp
-
-  // We get a response record back
-  assert resp.status == 200
-
-  let content_type = echo response.get_header(resp, "content-type")
-  assert content_type == Ok("application/json")
-
-  // assert resp.body == "{\"message\":\"Hello World\"}"
-  echo resp
-
-  user_from_json(resp.body) |> result.map_error(json_error_to_string)
+fn get_me(token: String) -> Result(User, String) {
+  use json <- result.try(get_json(token, "https://everybody.codes/api/user/me"))
+  user_from_json(json) |> result.map_error(json_error_to_string)
 }
 
 pub fn main() -> Nil {
-  {
+  let res = {
     use token <- result.try(get_token())
     use user <- result.try(get_me(token))
+    echo user
     Ok(Nil)
   }
-  Nil
+  case res {
+    Ok(_) -> Nil
+    Error(e) -> io.print_error(e)
+  }
 }
