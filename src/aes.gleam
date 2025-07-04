@@ -58,6 +58,11 @@ fn aes_256_cbc() -> atom {
 }
 
 fn unpad(bits: BitArray, block_size: Int) -> Result(BitArray, AesError) {
+  use <- bool.guard(
+    bit_array.byte_size(bits) % block_size != 0,
+    Error(InvalidPadding),
+  )
+
   use padding <- result.try(
     case bit_array.slice(bits, bit_array.byte_size(bits) - 1, 1) {
       Ok(<<value:int>>) -> Ok(value)
@@ -65,7 +70,7 @@ fn unpad(bits: BitArray, block_size: Int) -> Result(BitArray, AesError) {
     },
   )
 
-  use <- bool.guard(padding > block_size, Error(InvalidPadding))
+  use <- bool.guard(padding > block_size || padding < 1, Error(InvalidPadding))
 
   case bit_array.slice(bits, 0, bit_array.byte_size(bits) - padding) {
     Ok(unpadded) -> Ok(unpadded)
