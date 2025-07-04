@@ -8,7 +8,7 @@ import gleam/httpc
 import gleam/int
 import gleam/io
 import gleam/json
-import gleam/option.{type Option, None}
+import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
 import simplifile
@@ -204,72 +204,51 @@ fn get_inputs(
   inputs_from_json(json) |> snag.map_error(json_error_to_string)
 }
 
-type Aes {
-  ZeroComplete(key1: String)
-  OneComplete(key1: String, answer1: String, key2: String)
-  TwoComplete(
+type Keys {
+  Keys(
     key1: String,
-    answer1: String,
-    key2: String,
-    answer2: String,
-    key3: String,
-  )
-  ThreeComplete(
-    key1: String,
-    answer1: String,
-    key2: String,
-    answer2: String,
-    key3: String,
-    answer3: String,
+    key2: Option(String),
+    key3: Option(String),
+    answer1: Option(String),
+    answer2: Option(String),
+    answer3: Option(String),
   )
 }
 
-fn aes_from_json(json_string: String) -> gleam.Result(Aes, json.DecodeError) {
-  let aes0_decoder = {
+fn keys_from_json(json_string: String) -> gleam.Result(Keys, json.DecodeError) {
+  let keys_decoder = {
     use key1 <- decode.field("key1", decode.string)
-    decode.success(ZeroComplete(key1:))
+    use key2 <- decode.optional_field(
+      "key2",
+      None,
+      decode.optional(decode.string),
+    )
+    use key3 <- decode.optional_field(
+      "key3",
+      None,
+      decode.optional(decode.string),
+    )
+    use answer1 <- decode.optional_field(
+      "answer1",
+      None,
+      decode.optional(decode.string),
+    )
+    use answer2 <- decode.optional_field(
+      "answer2",
+      None,
+      decode.optional(decode.string),
+    )
+    use answer3 <- decode.optional_field(
+      "answer3",
+      None,
+      decode.optional(decode.string),
+    )
+    decode.success(Keys(key1:, key2:, key3:, answer1:, answer2:, answer3:))
   }
-  let aes1_decoder = {
-    use key1 <- decode.field("key1", decode.string)
-    use key2 <- decode.field("key2", decode.string)
-    use answer1 <- decode.field("answer1", decode.string)
-    decode.success(OneComplete(key1:, answer1:, key2:))
-  }
-  let aes2_decoder = {
-    use key1 <- decode.field("key1", decode.string)
-    use key2 <- decode.field("key2", decode.string)
-    use key3 <- decode.field("key2", decode.string)
-    use answer1 <- decode.field("answer1", decode.string)
-    use answer2 <- decode.field("answer1", decode.string)
-    decode.success(TwoComplete(key1:, answer1:, key2:, answer2:, key3:))
-  }
-  let aes3_decoder = {
-    use key1 <- decode.field("key1", decode.string)
-    use key2 <- decode.field("key2", decode.string)
-    use key3 <- decode.field("key2", decode.string)
-    use answer1 <- decode.field("answer1", decode.string)
-    use answer2 <- decode.field("answer1", decode.string)
-    use answer3 <- decode.field("answer1", decode.string)
-    decode.success(ThreeComplete(
-      key1:,
-      answer1:,
-      key2:,
-      answer2:,
-      key3:,
-      answer3:,
-    ))
-  }
-  json.parse(
-    from: json_string,
-    using: decode.one_of(aes3_decoder, [
-      aes2_decoder,
-      aes1_decoder,
-      aes0_decoder,
-    ]),
-  )
+  json.parse(from: json_string, using: keys_decoder)
 }
 
-fn get_aes(token: String, event: Int, quest: Int) -> Result(Aes) {
+fn get_keys(token: String, event: Int, quest: Int) -> Result(Keys) {
   use json <- result.try(get_json(
     token,
     "https://everybody.codes/api/event/"
@@ -277,7 +256,7 @@ fn get_aes(token: String, event: Int, quest: Int) -> Result(Aes) {
       <> "/quest/"
       <> int.to_string(quest),
   ))
-  aes_from_json(json) |> snag.map_error(json_error_to_string)
+  keys_from_json(json) |> snag.map_error(json_error_to_string)
 }
 
 // TODO:
@@ -289,26 +268,18 @@ fn get_aes(token: String, event: Int, quest: Int) -> Result(Aes) {
 //  - download_inputs(token, seed, event, quest)
 //  - get_key(event, quest, part)
 //  - download_keys(token, event, quest)
-//
-// Keys:
-//  - Rename Aes to Keys
-//  - Make key2, key3, answer1, answer2, answer3 optional
 fn get_input(event: Int, quest: Int, part: Int) -> Result(String) {
   use token <- result.try(get_token())
   use user <- result.try(get_me(token))
   let seed = user.seed
   use inputs <- result.try(get_inputs(token, seed, event, quest))
-  use aes_keys <- result.try(get_aes(token, event, quest))
+  use keys <- result.try(get_keys(token, event, quest))
 
   use #(key, input) <- result.try(
-    case part, aes_keys {
-      1, aes_keys -> Ok(#(aes_keys.key1, inputs.0))
-      2, OneComplete(key2:, ..)
-      | 2, TwoComplete(key2:, ..)
-      | 2, ThreeComplete(key2:, ..)
-      -> Ok(#(key2, inputs.1))
-      3, TwoComplete(key3:, ..) | 3, ThreeComplete(key3:, ..) ->
-        Ok(#(key3, inputs.2))
+    case part, keys {
+      1, Keys(key1:, ..) -> Ok(#(key1, inputs.0))
+      2, Keys(key2: Some(key2), ..) -> Ok(#(key2, inputs.0))
+      3, Keys(key3: Some(key3), ..) -> Ok(#(key3, inputs.0))
       2, _ | 3, _ ->
         snag.error(
           "Havn't completed prerequisite parts to get part "
