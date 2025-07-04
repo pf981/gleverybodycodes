@@ -1,24 +1,23 @@
 import envoy
-import filepath
+import gleam/bool
 import gleam/io
 import gleam/result
 import gleam/string
 import simplifile
 
 fn get_home() -> Result(String, Nil) {
-  use _ <- result.try_recover(envoy.get("HOME"))
-  envoy.get("USERPROFILE")
+  case envoy.get("HOME") {
+    Ok(home) -> Ok(home)
+    Error(Nil) -> envoy.get("USERPROFILE")
+  }
 }
 
 fn expand_home(path: String) -> Result(String, Nil) {
-  case path |> string.contains("~") {
-    True -> {
-      case get_home() {
-        Ok(home) -> Ok(path |> string.replace("~", home))
-        Error(e) -> Error(e)
-      }
-    }
-    False -> Ok(path)
+  use <- bool.guard(string.contains(path, "~"), Ok(path))
+
+  case get_home() {
+    Ok(home) -> path |> string.replace("~", home) |> Ok()
+    Error(e) -> Error(e)
   }
 }
 
