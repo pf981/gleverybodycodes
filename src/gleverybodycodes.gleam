@@ -19,7 +19,7 @@ fn get_home() -> Result(String) {
     Error(Nil) ->
       envoy.get("USERPROFILE")
       |> snag.map_error(fn(_) { "Unable to expand ~" })
-      |> snag.context("$HOME and $USERPROFILE not set")
+      |> snag.context("Set environment variables $HOME or $USERPROFILE.")
   }
 }
 
@@ -169,11 +169,131 @@ fn get_me(token: String) -> Result(User) {
   user_from_json(json) |> snag.map_error(json_error_to_string)
 }
 
+type Input {
+  Encrypted(String)
+  Decrypted(String)
+}
+
+type Inputs =
+  #(Input, Input, Input)
+
+fn inputs_from_json(
+  json_string: String,
+) -> gleam.Result(Inputs, json.DecodeError) {
+  let input_decoder = {
+    use input1 <- decode.field("1", decode.string)
+    use input2 <- decode.field("1", decode.string)
+    use input3 <- decode.field("1", decode.string)
+    decode.success(#(Encrypted(input1), Encrypted(input1), Encrypted(input1)))
+  }
+  json.parse(from: json_string, using: input_decoder)
+}
+
+fn get_inputs(
+  token: String,
+  seed: Int,
+  event: Int,
+  quest: Int,
+) -> Result(Inputs) {
+  use json <- result.try(get_json(
+    token,
+    "https://everybody-codes.b-cdn.net/assets/"
+      <> int.to_string(event)
+      <> "/"
+      <> int.to_string(quest)
+      <> "/input/"
+      <> int.to_string(seed)
+      <> ".json",
+  ))
+  inputs_from_json(json) |> snag.map_error(json_error_to_string)
+}
+
+type Aes {
+  ZeroComplete(key1: String)
+  OneComplete(key1: String, answer1: String, key2: String)
+  TwoComplete(
+    key1: String,
+    answer1: String,
+    key2: String,
+    answer2: String,
+    key3: String,
+  )
+  ThreeComplete(
+    key1: String,
+    answer1: String,
+    key2: String,
+    answer2: String,
+    key3: String,
+    answer3: String,
+  )
+}
+
+fn aes_from_json(json_string: String) -> gleam.Result(Aes, json.DecodeError) {
+  let aes0_decoder = {
+    use key1 <- decode.field("key1", decode.string)
+    decode.success(ZeroComplete(key1:))
+  }
+  let aes1_decoder = {
+    use key1 <- decode.field("key1", decode.string)
+    use key2 <- decode.field("key2", decode.string)
+    use answer1 <- decode.field("answer1", decode.string)
+    decode.success(OneComplete(key1:, answer1:, key2:))
+  }
+  let aes2_decoder = {
+    use key1 <- decode.field("key1", decode.string)
+    use key2 <- decode.field("key2", decode.string)
+    use key3 <- decode.field("key2", decode.string)
+    use answer1 <- decode.field("answer1", decode.string)
+    use answer2 <- decode.field("answer1", decode.string)
+    decode.success(TwoComplete(key1:, answer1:, key2:, answer2:, key3:))
+  }
+  let aes3_decoder = {
+    use key1 <- decode.field("key1", decode.string)
+    use key2 <- decode.field("key2", decode.string)
+    use key3 <- decode.field("key2", decode.string)
+    use answer1 <- decode.field("answer1", decode.string)
+    use answer2 <- decode.field("answer1", decode.string)
+    use answer3 <- decode.field("answer1", decode.string)
+    decode.success(ThreeComplete(
+      key1:,
+      answer1:,
+      key2:,
+      answer2:,
+      key3:,
+      answer3:,
+    ))
+  }
+  json.parse(
+    from: json_string,
+    using: decode.one_of(aes3_decoder, [
+      aes2_decoder,
+      aes1_decoder,
+      aes0_decoder,
+    ]),
+  )
+}
+
+fn get_aes(token: String, event: Int, quest: Int) -> Result(Aes) {
+  use json <- result.try(get_json(
+    token,
+    "https://everybody.codes/api/event/"
+      <> int.to_string(event)
+      <> "/quest/"
+      <> int.to_string(quest),
+  ))
+  aes_from_json(json) |> snag.map_error(json_error_to_string)
+}
+
 pub fn main() -> Nil {
   let res = {
     use token <- result.try(get_token())
     use user <- result.try(get_me(token))
+    let seed = user.seed
+    use inputs <- result.try(get_inputs(token, seed, 1, 1))
+    use aes <- result.try(get_aes(token, 1, 1))
     echo user
+    echo inputs
+    echo aes
     Ok(Nil)
   }
   case res {
