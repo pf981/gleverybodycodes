@@ -11,31 +11,41 @@ import gleam/result
 import gleam/string
 import simplifile
 
-fn get_home() -> Result(String, Nil) {
+fn get_home() -> Result(String, String) {
   case envoy.get("HOME") {
     Ok(home) -> Ok(home)
-    Error(Nil) -> envoy.get("USERPROFILE")
+    Error(Nil) ->
+      envoy.get("USERPROFILE")
+      |> result.replace_error(
+        "Unable to expand ~. $HOME and $USERPROFILE not set.",
+      )
   }
 }
 
-fn expand_home(path: String) -> Result(String, Nil) {
+fn expand_home(path: String) -> Result(String, String) {
   use <- bool.guard(!string.contains(path, "~"), Ok(path))
   use home <- result.try(get_home())
   path |> string.replace("~", home) |> Ok()
 }
 
 // EC_CONFIG_DIR, EC_DATA_DIR, EC_TOKEN
-fn get_token() -> Result(String, simplifile.FileError) {
+fn get_token() -> Result(String, String) {
   use _ <- result.try_recover(envoy.get("EC_TOKEN"))
 
   use path <- result.try(
     envoy.get("EC_CONFIG_DIR")
     |> result.unwrap("~/.config/ecd/token")
-    |> expand_home()
-    |> result.replace_error(simplifile.Unknown("Unable to expand ~")),
+    |> expand_home(),
   )
 
-  simplifile.read(path) |> result.map(string.trim_end)
+  simplifile.read(path)
+  |> result.map(string.trim_end)
+  |> result.map_error(fn(e) {
+    "Unable to read config file: "
+    <> path
+    <> "\n"
+    <> simplifile.describe_error(e)
+  })
 }
 
 type User {
@@ -107,7 +117,32 @@ fn user_from_json(json_string: String) -> Result(User, json.DecodeError) {
   json.parse(from: json_string, using: user_decoder)
 }
 
-fn get_me(token: String) {
+fn json_error_to_string(error: json.DecodeError) -> String {
+  echo error
+  // TODO: Properly display decode errors
+  "Unable to parse JSON"
+}
+
+fn http_error_to_string(error: httpc.HttpError) -> String {
+  echo error
+  "HTTP error: "
+  <> case error {
+    httpc.InvalidUtf8Response -> "Invalid UTF-8 response"
+    httpc.FailedToConnect(ip4:, ip6:) -> {
+      let ip4_string = case ip4 {
+        httpc.Posix(code:) -> "Posix: " <> code
+        httpc.TlsAlert(code:, detail:) -> "TLS: " <> code <> " - " <> detail
+      }
+      let ip6_string = case ip6 {
+        httpc.Posix(code:) -> "Posix: " <> code
+        httpc.TlsAlert(code:, detail:) -> "TLS: " <> code <> " - " <> detail
+      }
+      "Failed to connect\n" <> ip4_string <> "\n" <> ip6_string
+    }
+  }
+}
+
+fn get_me(token: String) -> Result(User, String) {
   let assert Ok(base_req) = request.to("https://everybody.codes/api/user/me")
 
   let req =
@@ -117,7 +152,9 @@ fn get_me(token: String) {
     |> request.prepend_header("Cookie", "everybody-codes=" <> token)
 
   // Send the HTTP request to the server
-  use resp <- result.try(httpc.send(req))
+  use resp <- result.try(
+    httpc.send(req) |> result.map_error(http_error_to_string),
+  )
 
   echo resp
 
@@ -130,22 +167,14 @@ fn get_me(token: String) {
   // assert resp.body == "{\"message\":\"Hello World\"}"
   echo resp
 
-  Ok(resp)
+  user_from_json(resp.body) |> result.map_error(json_error_to_string)
 }
 
 pub fn main() -> Nil {
-  case get_token() {
-    Ok(token) -> io.println(token)
-    Error(_) -> io.println("Missing token")
+  {
+    use token <- result.try(get_token())
+    use user <- result.try(get_me(token))
+    Ok(Nil)
   }
-  let assert Ok(token) = get_token()
-
-  let assert Ok(resp) = get_me(token)
-  // let assert Ok(resp) = get_me("")
-
-  echo resp.body
-
-  let user = echo user_from_json(resp.body)
-
   Nil
 }
