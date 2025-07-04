@@ -280,6 +280,19 @@ fn get_aes(token: String, event: Int, quest: Int) -> Result(Aes) {
   aes_from_json(json) |> snag.map_error(json_error_to_string)
 }
 
+// TODO:
+// Cache:
+//  - get_token()
+//  - get_me()
+//  - download_me(token)
+//  - get_input(event, quest, part)
+//  - download_inputs(token, seed, event, quest)
+//  - get_key(event, quest, part)
+//  - download_keys(token, event, quest)
+//
+// Keys:
+//  - Rename Aes to Keys
+//  - Make key2, key3, answer1, answer2, answer3 optional
 fn get_input(event: Int, quest: Int, part: Int) -> Result(String) {
   use token <- result.try(get_token())
   use user <- result.try(get_me(token))
