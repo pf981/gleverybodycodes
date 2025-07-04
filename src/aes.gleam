@@ -1,6 +1,40 @@
 import gleam/bit_array
+import gleam/bool
 import gleam/result
 import gleam/string
+
+pub type AesError {
+  DecryptionFailed
+  InvalidPadding
+}
+
+pub fn aes_error_to_string(error: AesError) {
+  case error {
+    DecryptionFailed -> "Decryption failed"
+    InvalidPadding -> "Invalid padding"
+  }
+}
+
+pub fn decrypt_aes_256_cbc(
+  key_string: String,
+  ciphertext_hex: String,
+) -> Result(String, AesError) {
+  let key = bit_array.from_string(key_string)
+  let iv = key_string |> string.slice(0, 16) |> bit_array.from_string()
+
+  use ciphertext <- result.try(
+    bit_array.base16_decode(ciphertext_hex)
+    |> result.replace_error(DecryptionFailed),
+  )
+
+  use unpadded <- result.try(
+    crypto_one_time_raw(aes_256_cbc(), key, iv, ciphertext, False)
+    |> unpad(16),
+  )
+  unpadded
+  |> bit_array.to_string
+  |> result.replace_error(DecryptionFailed)
+}
 
 @external(erlang, "crypto", "crypto_one_time")
 fn crypto_one_time_raw(
@@ -10,8 +44,6 @@ fn crypto_one_time_raw(
   data: BitArray,
   encrypt: Bool,
 ) -> BitArray
-
-//-> Result(BitArray, atom)
 
 @external(erlang, "erlang", "list_to_atom")
 fn list_to_atom(charlist: List(Int)) -> atom
@@ -25,29 +57,18 @@ fn aes_256_cbc() -> atom {
   |> list_to_atom
 }
 
-fn unpad(bits: BitArray, block_size: Int) {
-  let assert Ok(padding) =
-    bit_array.slice(bits, bit_array.byte_size(bits) - 1, 1)
-  let padding = bit_array_to_int(padding)
-  let assert Ok(result) =
-    bit_array.slice(bits, 0, bit_array.byte_size(bits) - padding)
-  result
-}
+fn unpad(bits: BitArray, block_size: Int) -> Result(BitArray, AesError) {
+  use padding <- result.try(
+    case bit_array.slice(bits, bit_array.byte_size(bits) - 1, 1) {
+      Ok(<<value:int>>) -> Ok(value)
+      _ -> Error(InvalidPadding)
+    },
+  )
 
-fn bit_array_to_int(bits: BitArray) -> Int {
-  case bits {
-    <<value:int>> -> value
-    _ -> panic
+  use <- bool.guard(padding > block_size, Error(InvalidPadding))
+
+  case bit_array.slice(bits, 0, bit_array.byte_size(bits) - padding) {
+    Ok(unpadded) -> Ok(unpadded)
+    Error(_) -> Error(InvalidPadding)
   }
-}
-
-pub fn decrypt_aes_256_cbc(
-  key_string: String,
-  ciphertext_hex: String,
-) -> Result(String, Nil) {
-  let key = bit_array.from_string(key_string)
-  let iv = key_string |> string.slice(0, 16) |> bit_array.from_string()
-  let assert Ok(ciphertext) = bit_array.base16_decode(ciphertext_hex)
-  let result = crypto_one_time_raw(aes_256_cbc(), key, iv, ciphertext, False)
-  result |> unpad(16) |> bit_array.to_string
 }
