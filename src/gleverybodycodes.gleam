@@ -120,13 +120,10 @@ fn user_from_json(json_string: String) -> gleam.Result(User, json.DecodeError) {
 }
 
 fn json_error_to_string(error: json.DecodeError) -> String {
-  echo error
-  // TODO: Properly display decode errors
-  "Unable to parse JSON"
+  "Unable to parse JSON: " <> string.inspect(error)
 }
 
 fn http_error_to_string(error: httpc.HttpError) -> String {
-  echo error
   "HTTP error: "
   <> case error {
     httpc.InvalidUtf8Response -> "Invalid UTF-8 response"
@@ -264,10 +261,18 @@ fn get_keys(token: String, event: Int, quest: Int) -> Result(Keys) {
 //  - get_token()
 //  - get_me()
 //  - download_me(token)
+//  - get_seed()
 //  - get_input(event, quest, part)
 //  - download_inputs(token, seed, event, quest)
 //  - get_key(event, quest, part)
 //  - download_keys(token, event, quest)
+//
+// Can I just use string.inspect to convert error messages?
+// |> result.map_error(fn(e) {
+//   string.inspect(e)
+//   |> snag.new
+//   |> snag.layer("failed to read gleam.toml")
+// })
 fn get_input(event: Int, quest: Int, part: Int) -> Result(String) {
   use token <- result.try(get_token())
   use user <- result.try(get_me(token))
