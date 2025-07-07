@@ -1,3 +1,3 @@
 pub fn pt_1(input: String) -> String {
-  input
+  input <> " -> pt_1"
 }
