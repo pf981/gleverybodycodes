@@ -1,5 +1,4 @@
 import filepath
-import gleam/bool
 import gleam/dict
 import gleam/dynamic.{type Dynamic}
 import gleam/erlang/atom

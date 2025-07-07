@@ -1,65 +1,57 @@
-import gleam/dynamic
-import gleam/dynamic/decode
-import gleam/float
-import gleam/int
+import argv
 import gleam/io
-import gleam/result
-import internal/get
-import internal/package_tools.{type Func}
+import gleam/string
+import glint
+
+// import internal/cmd
+// import internal/cmd/new
+// import internal/cmd/run
 import snag
 
+/// Add this function to your project's `main` function in order to run the gladvent CLI.
+///
+/// This function gets its input from the command line arguments by using the `argv` library.
+///
+pub fn run() -> Nil {
+  let commands =
+    glint.new()
+    |> glint.path_help(
+      [],
+      "gleverybodycodes is an Everybody Codes runner and generator for gleam.
+
+
+      Please use either the 'run' or 'new' commands.
+      ",
+    )
+    |> glint.pretty_help(glint.default_pretty_help())
+  // |> glint.group_flag(at: [], of: cmd.year_flag())
+  // |> glint.add(at: ["new"], do: new.new_command())
+  // |> glint.group_flag(at: ["run"], of: run.timeout_flag())
+  // |> glint.group_flag(at: ["run"], of: run.allow_crash_flag())
+  // |> glint.group_flag(at: ["run"], of: run.timed_flag())
+  // |> glint.add(at: ["run"], do: run.run_command())
+  // |> glint.add(at: ["run", "all"], do: run.run_all_command())
+
+  use out <- glint.run_and_handle(commands, argv.load().arguments)
+  case out {
+    Ok(out) ->
+      out
+      |> string.join("\n\n")
+      |> io.println
+    Error(err) -> print_snag_and_halt(err)
+  }
+}
+
 pub fn main() -> Nil {
-  // let res = {
-  //   use token <- result.try(get_token())
-  //   use user <- result.try(get_me(token))
-  //   let seed = user.seed
-  //   use inputs <- result.try(get_inputs(token, seed, 1, 1))
-  //   use aes <- result.try(get_aes(token, 1, 1))
-  //   echo user
-  //   echo inputs
-  //   echo aes
-  //   Ok(Nil)
-  // }
+  run()
+}
 
-  // let input = get.get_input(1, 1, 1)
-  // case input {
-  //   Ok(s) -> io.println(s)
-  //   Error(e) -> e |> snag.pretty_print() |> io.println_error()
-  // }
+@external(erlang, "erlang", "halt")
+fn exit(a: Int) -> Nil
 
-  let #(event, quest) = #(1, 1)
-  let module_name =
-    "event_" <> int.to_string(event) <> "/quest_" <> int.to_string(quest)
-  let function_name = "pt_1"
-
-  // use module <- result.try(
-  //   dict.get(package.modules, module_name)
-  //   |> result.replace_error(ModuleNotFound(module_name)),
-  // )
-  // let _ = {
-  //   use package <- result.try(package_tools.get_package_interface())
-
-  //   case package_tools.get_function(package:, module_name:, function_name:) {
-  //     Error(_) -> todo
-  //     Ok(Func(f:, info:)) -> todo
-  //   }
-  // }
-  let assert Ok(package) = package_tools.get_package_interface()
-  let assert Ok(func) =
-    package_tools.get_function(package, module_name, function_name)
-  echo func.f
-  echo func.info
-
-  let result = func.f(dynamic.string("Hello World!"))
-
-  let decoder =
-    decode.one_of(decode.string, or: [
-      decode.int |> decode.map(int.to_string),
-      decode.float |> decode.map(float.to_string),
-    ])
-  echo decode.run(result, decoder)
-  // let result = case func.f(dynamic.string("Hello World!")) {
-  //   dynamic
-  // }
-  Nil
+fn print_snag_and_halt(err: snag.Snag) -> Nil {
+  err
+  |> snag.pretty_print()
+  |> io.println()
+  exit(1)
 }
