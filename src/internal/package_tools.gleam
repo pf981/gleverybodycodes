@@ -15,46 +15,56 @@ import simplifile
 import snag
 import spinner
 
-pub fn root() -> String {
-  find_root(".")
-}
-
-fn find_root(path: String) -> String {
-  let toml = filepath.join(path, "gleam.toml")
-
-  case simplifile.is_file(toml) {
-    Ok(False) | Error(_) -> find_root(filepath.join("..", path))
-    Ok(True) -> path
-  }
-}
-
-// pub fn src_root() {
-//   filepath.join(root(), "src")
-// }
-
-// pub fn src_dir(year) {
-//   filepath.join(src_root(), "aoc_" <> int.to_string(year))
-// }
+const package_interface_path = "build/.gladvent/pkg.json"
 
 pub type Func {
   Func(f: fn(Dynamic) -> Dynamic, info: package_interface.Function)
 }
 
-// get_function(module_name, function_name) -> Function(function_name, )
-// package_interface.Function(
-fn retrieve_function(
+pub type FunctionRetrievalErr {
+  ModuleNotFound(String)
+  ParseFunctionInvalid(String)
+  FunctionNotFound(module: String, function: String)
+  IncorrectInputParameters(
+    function: String,
+    expected: String,
+    got: List(package_interface.Type),
+  )
+}
+
+pub type PackageInterfaceError {
+  FailedToGleamBuild(String)
+  FailedToGeneratePackageInterface(String)
+  FailedToReadPackageInterface(simplifile.FileError)
+  FailedToDecodePackageInterface(json.DecodeError)
+}
+
+pub fn root() -> String {
+  find_root(".")
+}
+
+pub fn get_function(
   package: package_interface.Package,
   module_name: String,
   function_name: String,
-) -> Result(Func, RunnerRetrievalErr) {
+) -> Result(Func, FunctionRetrievalErr) {
   use module <- result.try(
     dict.get(package.modules, module_name)
     |> result.replace_error(ModuleNotFound(module_name)),
   )
-  todo
-}
+  use package_interface_function <- result.try(
+    module.functions
+    |> dict.get(function_name)
+    |> result.replace_error(FunctionNotFound(module_name, function_name)),
+  )
 
-const package_interface_path = "build/.gladvent/pkg.json"
+  let func =
+    function_arity_one(
+      atom.create(to_erlang_module_name(module_name)),
+      atom.create(function_name),
+    )
+  Ok(Func(func, package_interface_function))
+}
 
 pub fn package_interface_error_to_snag(e: PackageInterfaceError) -> snag.Snag {
   case e {
@@ -71,13 +81,6 @@ pub fn package_interface_error_to_snag(e: PackageInterfaceError) -> snag.Snag {
       snag.new(string.inspect(e))
       |> snag.layer("failed to decode package interface json")
   }
-}
-
-pub type PackageInterfaceError {
-  FailedToGleamBuild(String)
-  FailedToGeneratePackageInterface(String)
-  FailedToReadPackageInterface(simplifile.FileError)
-  FailedToDecodePackageInterface(json.DecodeError)
 }
 
 pub fn get_package_interface() -> Result(
@@ -125,44 +128,42 @@ pub fn get_package_interface() -> Result(
   Ok(pkg_interface_details)
 }
 
-pub type RunnerRetrievalErr {
-  ModuleNotFound(String)
-  ParseFunctionInvalid(String)
-  FunctionNotFound(module: String, function: String)
-  IncorrectInputParameters(
-    function: String,
-    expected: String,
-    got: List(package_interface.Type),
-  )
-}
+// fn retrieve_runner(
+//   module_name: String,
+//   module: package_interface.Module,
+//   function_name: String,
+//   runner_param_type: package_interface.Type,
+// ) -> Result(fn(Dynamic) -> Dynamic, RunnerRetrievalErr) {
+//   use f <- result.try(
+//     module.functions
+//     |> dict.get(function_name)
+//     |> result.replace_error(FunctionNotFound(module_name, function_name)),
+//   )
+//   use <- bool.guard(
+//     when: case f.parameters {
+//       [param] -> param.type_ != runner_param_type
+//       _ -> True
+//     },
+//     return: Error(IncorrectInputParameters(
+//       function: function_name,
+//       expected: type_to_string(runner_param_type),
+//       got: list.map(f.parameters, fn(p) { p.type_ }),
+//     )),
+//   )
 
-fn retrieve_runner(
-  module_name: String,
-  module: package_interface.Module,
-  function_name: String,
-  runner_param_type: package_interface.Type,
-) -> Result(fn(Dynamic) -> Dynamic, RunnerRetrievalErr) {
-  use f <- result.try(
-    module.functions
-    |> dict.get(function_name)
-    |> result.replace_error(FunctionNotFound(module_name, function_name)),
-  )
-  use <- bool.guard(
-    when: case f.parameters {
-      [param] -> param.type_ != runner_param_type
-      _ -> True
-    },
-    return: Error(IncorrectInputParameters(
-      function: function_name,
-      expected: type_to_string(runner_param_type),
-      got: list.map(f.parameters, fn(p) { p.type_ }),
-    )),
-  )
+//   Ok(function_arity_one(
+//     atom.create(to_erlang_module_name(module_name)),
+//     atom.create(function_name),
+//   ))
+// }
 
-  Ok(function_arity_one(
-    atom.create(to_erlang_module_name(module_name)),
-    atom.create(function_name),
-  ))
+fn find_root(path: String) -> String {
+  let toml = filepath.join(path, "gleam.toml")
+
+  case simplifile.is_file(toml) {
+    Ok(False) | Error(_) -> find_root(filepath.join("..", path))
+    Ok(True) -> path
+  }
 }
 
 fn to_erlang_module_name(name) {
