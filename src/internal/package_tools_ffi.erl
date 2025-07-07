@@ -1,4 +1,4 @@
--module(runners_ffi).
+-module(package_tools_ffi).
 
 -export([
     function_arity_one/2,
