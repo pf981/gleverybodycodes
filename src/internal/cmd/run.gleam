@@ -1,33 +1,13 @@
-// import decode
-import filepath
+import gleam/dynamic
 import gleam/dynamic/decode
 import gleam/float
-import internal/package_tools
-
-// import gladvent/internal/cmd.{Ending, Endless}
-// import gladvent/internal/input
-// import gladvent/internal/parse.{type Day}
-// import gladvent/internal/runners
-// import gladvent/internal/util
-import gleam
-import gleam/dict
-import gleam/dynamic.{type Dynamic}
-
-// import gleam/erlang
-import gleam/erlang/atom
-import gleam/erlang/charlist.{type Charlist}
 import gleam/int
-import gleam/list
-import gleam/option.{type Option}
-import gleam/package_interface
 import gleam/result
 import gleam/string
 import glint
-import simplifile
-import snag.{type Result, type Snag}
-import spinner
-
-// import tom
+import internal/get
+import internal/package_tools
+import snag.{type Result}
 
 pub fn run_command() -> glint.Command(Result(String)) {
   use <- glint.command_help("Run the specified event, quest, and part")
@@ -41,7 +21,16 @@ pub fn run_command() -> glint.Command(Result(String)) {
   let assert Ok(part) = int.parse(part)
 
   run(event, quest, part)
-  //   |> snag.map_error(err_to_string)
+  |> result.map(fn(output) {
+    "Event "
+    <> int.to_string(event)
+    <> ", Quest "
+    <> int.to_string(quest)
+    <> ", Part "
+    <> int.to_string(part)
+    <> ": "
+    <> output
+  })
 }
 
 fn run(event: Int, quest: Int, part: Int) -> Result(String) {
@@ -52,10 +41,10 @@ fn run(event: Int, quest: Int, part: Int) -> Result(String) {
   let assert Ok(package) = package_tools.get_package_interface()
   let assert Ok(func) =
     package_tools.get_function(package, module_name, function_name)
-  echo func.f
-  echo func.info
 
-  let result = func.f(dynamic.string("Hello World!"))
+  use input <- result.try(get.get_input(event, quest, part))
+
+  let output = func.f(dynamic.string(input))
 
   let decoder =
     decode.one_of(decode.string, or: [
@@ -63,9 +52,9 @@ fn run(event: Int, quest: Int, part: Int) -> Result(String) {
       decode.float |> decode.map(float.to_string),
     ])
 
-  decode.run(result, decoder)
+  decode.run(output, decoder)
   |> snag.map_error(string.inspect)
   |> snag.context(
-    "Couldn't decode result of " <> module_name <> "." <> function_name,
+    "Couldn't decode output of " <> module_name <> "." <> function_name,
   )
 }
