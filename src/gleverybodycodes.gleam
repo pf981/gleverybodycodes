@@ -1,11 +1,7 @@
 import argv
 import gleam/io
-import gleam/string
 import glint
-
-// import internal/cmd
-// import internal/cmd/new
-// import internal/cmd/run
+import internal/cmd/new
 import snag
 
 /// Add this function to your project's `main` function in order to run the gladvent CLI.
@@ -13,6 +9,9 @@ import snag
 /// This function gets its input from the command line arguments by using the `argv` library.
 ///
 pub fn run() -> Nil {
+  // gleam run new event quest
+  // gleam run run event quest [part]
+  // gleam run submit event quest part
   let commands =
     glint.new()
     |> glint.path_help(
@@ -24,20 +23,11 @@ pub fn run() -> Nil {
       ",
     )
     |> glint.pretty_help(glint.default_pretty_help())
-  // |> glint.group_flag(at: [], of: cmd.year_flag())
-  // |> glint.add(at: ["new"], do: new.new_command())
-  // |> glint.group_flag(at: ["run"], of: run.timeout_flag())
-  // |> glint.group_flag(at: ["run"], of: run.allow_crash_flag())
-  // |> glint.group_flag(at: ["run"], of: run.timed_flag())
-  // |> glint.add(at: ["run"], do: run.run_command())
-  // |> glint.add(at: ["run", "all"], do: run.run_all_command())
+    |> glint.add(at: ["new"], do: new.new_command())
 
   use out <- glint.run_and_handle(commands, argv.load().arguments)
   case out {
-    Ok(out) ->
-      out
-      |> string.join("\n\n")
-      |> io.println
+    Ok(Nil) -> Nil
     Error(err) -> print_snag_and_halt(err)
   }
 }
