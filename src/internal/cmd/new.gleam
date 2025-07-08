@@ -7,7 +7,7 @@ import internal/package_tools
 import simplifile
 import snag
 
-pub fn new_command() -> glint.Command(Result(Nil, snag.Snag)) {
+pub fn new_command() -> glint.Command(snag.Result(String)) {
   use <- glint.command_help("Create .gleam and input files")
   use <- glint.unnamed_args(glint.EqArgs(2))
   use parse_flag <- glint.flag(
@@ -25,14 +25,37 @@ pub fn new_command() -> glint.Command(Result(Nil, snag.Snag)) {
   // |> glint.constraint(constraint.one_of([1, 2, 3]))
   let assert Ok(quest) = int.parse(quest)
 
+  //   use success <- result.map(
+  //     new(event, quest, add_parse)
+  //     |> snag.map_error(err_to_string),
+  //   )
+  //   //   |> (fn() {"Created file: " <> )
   new(event, quest, add_parse)
   |> snag.map_error(err_to_string)
-  |> result.replace(Nil)
+  |> result.map(fn(success) { "Created file: " <> success.name })
 }
 
+const gleam_starter = "pub fn pt_1(input: String) {
+  todo as \"part 1 not implemented\"
+}
+
+pub fn pt_2(input: String) {
+  todo as \"part 2 not implemented\"
+}
+
+pub fn pt_3(input: String) {
+  todo as \"part 3 not implemented\"
+}
+"
+
+const parse_starter = "pub fn parse(input: String) -> String {
+  todo as \"parse not implemented\"
+}
+"
+
 type Success {
-  Dir(String)
-  File(String)
+  Dir(name: String)
+  File(name: String)
 }
 
 type Err {
@@ -101,17 +124,3 @@ fn handle_dir_open_res(
     Error(e) -> Error(FailedToCreateDir(filename, e))
   }
 }
-
-const gleam_starter = "pub fn pt_1(input: String) {
-  todo as \"part 1 not implemented\"
-}
-
-pub fn pt_2(input: String) {
-  todo as \"part 2 not implemented\"
-}
-"
-
-const parse_starter = "pub fn parse(input: String) -> String {
-  todo as \"parse not implemented\"
-}
-"

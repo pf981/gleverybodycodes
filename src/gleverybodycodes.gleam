@@ -2,6 +2,7 @@ import argv
 import gleam/io
 import glint
 import internal/cmd/new
+import internal/cmd/run
 import snag
 
 /// Add this function to your project's `main` function in order to run the gladvent CLI.
@@ -24,10 +25,11 @@ pub fn run() -> Nil {
     )
     |> glint.pretty_help(glint.default_pretty_help())
     |> glint.add(at: ["new"], do: new.new_command())
+    |> glint.add(at: ["run"], do: run.run_command())
 
   use out <- glint.run_and_handle(commands, argv.load().arguments)
   case out {
-    Ok(Nil) -> Nil
+    Ok(output) -> io.println(output)
     Error(err) -> print_snag_and_halt(err)
   }
 }
