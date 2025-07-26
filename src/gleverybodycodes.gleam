@@ -10,9 +10,21 @@ import snag
 /// This function gets its input from the command line arguments by using the `argv` library.
 ///
 pub fn run() -> Nil {
-  // gleam run new event quest
-  // gleam run run event quest [part]
-  // gleam run submit event quest part
+  // Run all parts for an event and quest
+  // If the gleam file for the quest does not exist, it will be created
+  // If the input files do not exist, they will be fetched
+  // If the correct result was previously submitted and cached, it will check if the value is correct
+  // $ gleam run event quest
+  // 
+  // Submit the result for the event and quest
+  // Will first check if the account has solved this quest
+  // Will only submit if
+  //   - This submission value doesn't match cached previously submitted values
+  //   - The part runs successfully (doesn't panic)
+  //   - The account has completed previous prerequisite quest parts
+  // $ gleam run --submit=part event quest
+
+  // Thoughts: How to force it to check all solutions?
   let commands =
     glint.new()
     |> glint.path_help(
