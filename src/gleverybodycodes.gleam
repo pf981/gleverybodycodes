@@ -1,12 +1,17 @@
 import argv
 import gleam/bool
+import gleam/dict
 import gleam/int
 import gleam/io
 import gleam/list
+import gleam/option.{None, Some}
 import gleam/result
+import gleam/set
+import gleam/string
 import glint
 import glint/constraint
 import internal/cmd/new
+import internal/cmd/run
 import snag.{type Result}
 
 /// Add this function to your project's `main` function in order to run the gladvent CLI.
@@ -130,34 +135,132 @@ fn run_command() -> glint.Command(Result(String)) {
         Ok("Successfully created " <> name)
       Error(e) -> Error(e) |> snag.map_error(new.err_to_string)
     }
-    // Ok("")
-    // ""
   })
 
-  // case new {
-  //   True -> todo
-  //   False -> todo
-  // }
+  use submit_part: option.Option(Int) <- result.map(case submit(flags) {
+    Ok(submit_part) ->
+      case contains(parts, submit_part) {
+        False ->
+          snag.error(
+            "--submit=<part> must be one of --parts=<parts>. "
+            <> int.to_string(submit_part)
+            <> " not in ["
+            <> string.join(list.map(parts, int.to_string), ",")
+            <> "].",
+          )
+          |> snag.context("Invalid arguments")
+        True -> Ok(Some(submit_part))
+      }
+    Error(_) -> Ok(None)
+  })
 
-  case submit(flags) {
-    Ok(part) -> io.print("Submit " <> int.to_string(part))
-    Error(e) -> io.print("Not submitting")
+  // parts
+  // |> list.map(fn(part) {
+  //   run.run_part(event, quest, part)
+  //   |> result.map(fn(output) {
+  //     "Event "
+  //     <> int.to_string(event)
+  //     <> ", Quest "
+  //     <> int.to_string(quest)
+  //     <> ", Part "
+  //     <> int.to_string(part)
+  //     <> ": "
+  //     <> output
+  //   })
+  // })
+
+  let outputs = #(
+    case contains(parts, 1) {
+      True -> Some(run.run_part(event, quest, 1))
+      False -> None
+    },
+    case contains(parts, 2) {
+      True -> Some(run.run_part(event, quest, 2))
+      False -> None
+    },
+    case contains(parts, 3) {
+      True -> Some(run.run_part(event, quest, 3))
+      False -> None
+    },
+  )
+
+  let outputs =
+    parts
+    |> list.map(fn(part) { #(part, run.run_part(event, quest, part)) })
+    |> dict.from_list
+
+  // let outputs =
+  //   [1, 2, 3]
+  //   |> list.map(fn(part) {
+  //     case contains(parts, part) {
+  //       True -> Some(run.run_part(event, quest, part))
+  //       False -> None
+  //     }
+  //   })
+
+  // let output_string =
+  //   outputs
+  //   |> list.map(fn(res) {
+  //     res
+  //     |> result.map(fn(output) {
+  //       "Event "
+  //       <> int.to_string(event)
+  //       <> ", Quest "
+  //       <> int.to_string(quest)
+  //       <> ", Part "
+  //       <> int.to_string(part)
+  //       <> ": "
+  //       <> output
+  //     })
+  //   })
+  let output_string =
+    [1, 2, 3]
+    |> list.map(fn(part) {
+      let status = case dict.get(outputs, part) {
+        Error(_) -> "SKIPPED"
+        Ok(Ok(output)) -> "SUCCESS\n" <> output
+        Ok(Error(e)) -> "ERROR\n" <> snag.pretty_print(e)
+      }
+      "Event "
+      <> int.to_string(event)
+      <> ", Quest "
+      <> int.to_string(quest)
+      <> ", Part "
+      <> int.to_string(part)
+      <> ": "
+      <> status
+    })
+    |> string.join("\n\n")
+
+  let submit_string = case submit_part {
+    Some(part) ->
+      "\n\nSubmitting part "
+      <> int.to_string(part)
+      <> " using result '"
+      <> "TODO"
+      <> "'"
+    None -> ""
   }
 
-  // run(event, quest, part)
-  // |> result.map(fn(output) {
-  //   "Event "
-  //   <> int.to_string(event)
-  //   <> ", Quest "
-  //   <> int.to_string(quest)
-  //   <> ", Part "
-  //   <> int.to_string(part)
-  //   <> ": "
-  //   <> output
-  // })
-  // let s = int.to_string(event()) <> " " <> int.to_string(quest)
-  let s = int.to_string(event) <> " " <> int.to_string(quest)
-  // // Ok(s)
-  Ok(s)
-  // ""
+  // Event 1 Quest 1 Part 1: SUCCESS
+  // 1234
+  //
+  // Event 1 Quest 1 Part 2: ERROR
+  // ...
+  //
+  // Event 1 Quest 1 Part 3: SKIPPED
+  //
+  // Event 1 Quest 1 Part 3: NOT IMPLEMENTED (todo error) - don't think this is inferrable
+  //
+
+  output_string <> submit_string
+}
+
+// Linear scan to determine membership. Only suitable for very small lists.
+fn contains(l: List(a), element: a) -> Bool {
+  case l {
+    [first, ..] if first == element -> True
+    [_, ..rest] -> contains(rest, element)
+    [] -> False
+  }
 }

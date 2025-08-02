@@ -4,36 +4,11 @@ import gleam/float
 import gleam/int
 import gleam/result
 import gleam/string
-import glint
 import internal/get
 import internal/package_tools
 import snag.{type Result}
 
-pub fn run_command() -> glint.Command(Result(String)) {
-  use <- glint.command_help("Run the specified event, quest, and part")
-  use <- glint.unnamed_args(glint.EqArgs(3))
-  use _, args, _ <- glint.command()
-
-  // TODO: Properly handle this
-  let assert [event, quest, part] = args
-  let assert Ok(event) = int.parse(event)
-  let assert Ok(quest) = int.parse(quest)
-  let assert Ok(part) = int.parse(part)
-
-  run(event, quest, part)
-  |> result.map(fn(output) {
-    "Event "
-    <> int.to_string(event)
-    <> ", Quest "
-    <> int.to_string(quest)
-    <> ", Part "
-    <> int.to_string(part)
-    <> ": "
-    <> output
-  })
-}
-
-fn run(event: Int, quest: Int, part: Int) -> Result(String) {
+pub fn run_part(event: Int, quest: Int, part: Int) -> Result(String) {
   let module_name =
     "event_" <> int.to_string(event) <> "/quest_" <> int.to_string(quest)
   let function_name = "pt_" <> int.to_string(part)

@@ -306,6 +306,7 @@ pub fn get_input(event: Int, quest: Int, part: Int) -> Result(String) {
 
   aes.decrypt_aes_256_cbc(key, input)
   |> snag.map_error(aes.aes_error_to_string)
+  |> snag.context("Failed to decrypt input")
 }
 
 pub fn main() -> Nil {
