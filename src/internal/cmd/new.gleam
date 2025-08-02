@@ -53,18 +53,18 @@ const parse_starter = "pub fn parse(input: String) -> String {
 }
 "
 
-type Success {
+pub type Success {
   Dir(name: String)
   File(name: String)
 }
 
-type Err {
+pub type Err {
   FailedToCreateDir(String, simplifile.FileError)
   FailedToCreateFile(String, simplifile.FileError)
   FailedToWriteToFile(String, simplifile.FileError)
 }
 
-fn new(event: Int, quest: Int, add_parse: Bool) -> Result(Success, Err) {
+pub fn new(event: Int, quest: Int, add_parse: Bool) -> Result(Success, Err) {
   // src/event_{event}/quest_{quest}.gleam
   let src_path = gleam_src_path(event, quest)
 
@@ -85,7 +85,7 @@ fn new(event: Int, quest: Int, add_parse: Bool) -> Result(Success, Err) {
   |> result.replace(File(src_path))
 }
 
-fn err_to_string(e: Err) -> String {
+pub fn err_to_string(e: Err) -> String {
   case e {
     FailedToCreateDir(d, e) ->
       "failed to create dir '" <> d <> "': " <> simplifile.describe_error(e)

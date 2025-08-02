@@ -1,12 +1,13 @@
 import argv
+import gleam/bool
 import gleam/int
 import gleam/io
+import gleam/list
 import gleam/result
 import glint
-
-// import internal/cmd/new
-// import internal/cmd/run
-import snag
+import glint/constraint
+import internal/cmd/new
+import snag.{type Result}
 
 /// Add this function to your project's `main` function in order to run the gladvent CLI.
 ///
@@ -62,20 +63,41 @@ fn print_snag_and_halt(err: snag.Snag) -> Nil {
   exit(1)
 }
 
-fn run_command() -> glint.Command(Result(String, snag.Snag)) {
-  // use <- glint.command_help("Prints Hello, <names>!")
-  // use <- glint.unnamed_args(glint.MinArgs(1))
-  // use _, args, flags <- glint.command()
-  // // let assert Ok(caps) = glint.get_flag(flags, caps_flag())
-  // // let assert Ok(repeat) = glint.get_flag(flags, repeat_flag())
-  // // let assert [name, ..rest] = args
-  // Ok("")
+fn submit_flag() {
+  glint.int_flag("submit")
+  |> glint.flag_help("Submit the <part>. Must be one of <parts>.")
+  |> glint.flag_constraint(constraint.one_of([1, 2, 3]))
+}
 
-  use <- glint.command_help("Run the specified event and quest")
+fn parts_flag() {
+  glint.ints_flag("parts")
+  |> glint.flag_help("Run the specified <parts>")
+  |> glint.flag_default([1, 2, 3])
+  |> glint.flag_constraint([1, 2, 3] |> constraint.one_of() |> constraint.each)
+}
+
+fn new_flag() {
+  glint.bool_flag("new")
+  |> glint.flag_help(
+    "Create src/event_<event>/quest_<quest>.gleam if it does not exist and do not execute. Cannot be used with --parts or --submit",
+  )
+  |> glint.flag_default(False)
+}
+
+fn run_command() -> glint.Command(Result(String)) {
+  use <- glint.command_help("Run the specified <event> and <quest>")
   use <- glint.unnamed_args(glint.EqArgs(0))
   use event <- glint.named_arg("event")
   use quest <- glint.named_arg("quest")
-  use named, _unnamed, _flags <- glint.command()
+
+  use submit <- glint.flag(submit_flag())
+  use parts <- glint.flag(parts_flag())
+  use new <- glint.flag(new_flag())
+
+  use named, _unnamed, flags <- glint.command()
+
+  let assert Ok(parts) = parts(flags)
+  let assert Ok(new) = new(flags)
 
   use event <- result.try(
     int.parse(event(named))
@@ -84,7 +106,7 @@ fn run_command() -> glint.Command(Result(String, snag.Snag)) {
       |> snag.layer("event must be an integer"),
     ),
   )
-  use quest <- result.map(
+  use quest <- result.try(
     int.parse(quest(named))
     |> result.replace_error(
       snag.new("Invalid quest value '" <> quest(named) <> "'")
@@ -92,10 +114,35 @@ fn run_command() -> glint.Command(Result(String, snag.Snag)) {
     ),
   )
 
-  // TODO: Properly handle this
-  // let assert [event, quest] = args
-  // let assert Ok(event) = int.parse(event)
-  // let assert Ok(quest) = int.parse(quest)
+  use <- bool.lazy_guard(new, fn() {
+    use <- bool.guard(
+      list.length(parts) != 3,
+      snag.error("--parts flag cannot be specified when using --new")
+        |> snag.context("Invalid arguments"),
+    )
+    use <- bool.guard(
+      result.is_ok(submit(flags)),
+      snag.error("--submit flag cannot be specified when using --new")
+        |> snag.context("Invalid arguments"),
+    )
+    case new.new(event, quest, True) {
+      Ok(new.Dir(name)) | Ok(new.File(name)) ->
+        Ok("Successfully created " <> name)
+      Error(e) -> Error(e) |> snag.map_error(new.err_to_string)
+    }
+    // Ok("")
+    // ""
+  })
+
+  // case new {
+  //   True -> todo
+  //   False -> todo
+  // }
+
+  case submit(flags) {
+    Ok(part) -> io.print("Submit " <> int.to_string(part))
+    Error(e) -> io.print("Not submitting")
+  }
 
   // run(event, quest, part)
   // |> result.map(fn(output) {
@@ -111,6 +158,6 @@ fn run_command() -> glint.Command(Result(String, snag.Snag)) {
   // let s = int.to_string(event()) <> " " <> int.to_string(quest)
   let s = int.to_string(event) <> " " <> int.to_string(quest)
   // // Ok(s)
-  s
+  Ok(s)
   // ""
 }
